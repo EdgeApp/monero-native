@@ -10,6 +10,8 @@
 #include <limits>
 #include <ctime>
 #include <atomic>
+#include <chrono>
+#include <thread>
 #include "monero-methods.hpp"
 #include "nym-fetch.hpp"
 #include "wallet/api/wallet2_api.h"
@@ -875,7 +877,8 @@ std::string createTransaction(const std::vector<std::string> &args) {
  * PendingTransaction that createTransaction kept alive, looked up by the
  * signedTxHex token; the signed bytes are never reloaded from the token.
  * Args: walletId, signedTxHex (from createTransaction), documentDirectory (unused)
- * Returns: "success"
+ * Returns: JSON with txKey (the transaction secret key, or absent when the
+ * wallet cannot report it)
  */
 std::string broadcastTransaction(const std::vector<std::string> &args) {
   std::string walletId = args[0];
@@ -907,6 +910,32 @@ std::string broadcastTransaction(const std::vector<std::string> &args) {
   bool success = ptx->commit("");
   std::string error = success ? std::string() : ptx->errorString();
 
+  // Read the transaction secret key while the wallet still has the committed
+  // transaction fresh. The key is the sender's only proof of payment: the
+  // wallet picks it at random while building the transaction, so it can never
+  // be recomputed later, and only the wallet that built the transaction ever
+  // holds it. The signedTxHex token IS the txid (see createTransaction), which
+  // is exactly what getTxKey wants. A key we cannot read is not worth failing
+  // an already-broadcast payment over, so report it best-effort.
+  // Retry briefly: the wallet's background refresh can be mid-merge when the
+  // commit lands, and a merge snapshot taken before the send briefly leaves
+  // the fresh transaction unreadable (observed empirically on the lwsf
+  // backend: empty at the first read, present well within the retry budget).
+  // The key is worth a short wait, but never worth failing an
+  // already-broadcast payment: after the budget, report no key and let the
+  // caller recover it from the wallet's transaction list later.
+  std::string txKey;
+  if (success) {
+    for (int attempt = 0; attempt < 10; ++attempt) {
+      try {
+        txKey = wallet->getTxKey(signedTxHex);
+      } catch (...) {
+      }
+      if (!txKey.empty()) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+  }
+
   // Dispose on failure too. A retry of the same object is not reliable across
   // backends (lwsf poisons the object's status after a failed send, and
   // wallet2 never resets it), so the failure is terminal by design. This is
@@ -924,7 +953,10 @@ std::string broadcastTransaction(const std::vector<std::string> &args) {
       ". The transaction was discarded; create a new one to retry.");
   }
 
-  return "success";
+  if (txKey.empty()) {
+    return "{}";
+  }
+  return "{\"txKey\":\"" + jsonEscape(txKey) + "\"}";
 }
 
 /** Helper: escape a string for JSON (escape backslash and double-quote). */

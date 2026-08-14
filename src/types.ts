@@ -90,6 +90,16 @@ export interface SignedTransaction {
   fee: string
 }
 
+/** Return type for broadcastTransaction. */
+export interface BroadcastResult {
+  /**
+   * The transaction secret key, when the wallet can report it. The sender's
+   * only proof of payment: chosen at random while building the transaction,
+   * held only by the wallet that built it, and never recoverable later.
+   */
+  txKey?: string
+}
+
 /** Parsed Monero URI (parseUri result). */
 export interface ParsedUri {
   address: string

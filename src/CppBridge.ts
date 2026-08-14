@@ -1,6 +1,7 @@
 'use strict'
 
 import type {
+  BroadcastResult,
   DerivedKeys,
   EncodeUriParams,
   GeneratedWallet,
@@ -259,20 +260,23 @@ export class CppBridge {
    * natively retained transaction to broadcast.
    * @param walletId - Unique identifier for the wallet
    * @param signedTx - The signedTxHex returned by createTransaction
-   * @returns "success"
+   * @returns BroadcastResult with the transaction secret key, when the wallet
+   *   can report it. This is the only chance to read the key on the send path:
+   *   it is not derivable from the seed, so a caller that drops it here can
+   *   only recover it from this wallet's local cache later.
    * @throws Error if the transaction is no longer retained (evicted, or the
    *   wallet was closed since creation) or the broadcast fails
    */
   async broadcastTransaction(
     walletId: string,
     signedTx: string
-  ): Promise<string> {
+  ): Promise<BroadcastResult> {
     const response = await this.module.callMonero('broadcastTransaction', [
       walletId,
       signedTx,
       this.module.documentDirectory
     ])
-    return response
+    return JSON.parse(response) as BroadcastResult
   }
 
   /**
