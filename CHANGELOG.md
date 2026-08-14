@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 (2026-08-14)
+
 - changed: (Breaking) `broadcastTransaction` returns a `BroadcastResult` with the transaction secret key (`txKey`) instead of the string `"success"`. The key is the sender's only proof of payment and the broadcast is the send path's only chance to hand it to the caller, since it cannot be derived from the seed. A key the wallet cannot report never fails an already-broadcast payment: the result simply carries no `txKey`.
 
 ## 0.4.2 (2026-07-17)
