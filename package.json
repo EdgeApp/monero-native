@@ -1,14 +1,14 @@
 {
-  "name": "react-native-monero",
-  "version": "0.5.0",
-  "description": "React Native bindings for the monero-lwsf library",
-  "homepage": "https://github.com/EdgeApp/react-native-monero",
+  "name": "monero-native",
+  "version": "0.0.1",
+  "description": "Native Monero wallet library for React Native and Node.js",
+  "homepage": "https://github.com/EdgeApp/monero-native",
   "repository": {
     "type": "git",
-    "url": "git@github.com:EdgeApp/react-native-monero.git"
+    "url": "git@github.com:EdgeApp/monero-native.git"
   },
   "license": "BSD-3-Clause",
-  "author": "Airbitz, Inc.",
+  "author": "Airbitz Inc dba Edge",
   "main": "lib/src/index.js",
   "types": "lib/src/index.d.ts",
   "files": [
@@ -17,23 +17,32 @@
     "/CHANGELOG.md",
     "/ios/",
     "/lib/src/",
+    "/LICENSE",
+    "/monero-native.podspec",
+    "/node.d.ts",
+    "/node.js",
     "/package.json",
-    "/react-native-monero.podspec",
+    "/prebuilds/",
     "/README.md",
-    "/src/monero-wrapper/monero-methods.hpp"
+    "/src/monero-wrapper/monero-methods.hpp",
+    "/src/node/",
+    "!/android/src/main/jniLibs/armeabi-v7a"
   ],
   "lint-staged": {
     "*.{js,ts}": "eslint"
   },
   "scripts": {
+    "build-native": "ZERO_AR_DATE=1 node -r sucrase/register ./scripts/build-native.ts",
+    "build-native-arm64": "ZERO_AR_DATE=1 node -r sucrase/register ./scripts/build-native.ts default-arm64",
+    "build-native-host": "ZERO_AR_DATE=1 node -r sucrase/register ./scripts/build-native-host.ts host",
     "clean": "npm run clean:js && rm -rf tmp android/src/main/jniLibs ios/MoneroModule.xcframework",
     "clean:js": "rm -rf node_modules lib",
     "fix": "npm run lint -- --fix",
     "lint": "eslint .",
-    "prepack": "npm run build-native",
-    "prepare": "husky && lint-staged && rimraf lib && tsc",
     "precommit": "npm run lint",
-    "build-native": "ZERO_AR_DATE=1 node -r sucrase/register ./scripts/build-native.ts"
+    "prepare": "husky && rimraf lib && tsc",
+    "prepublishOnly": "npm run build-native-arm64 && npm run build-native-host",
+    "smoke-node": "node -r sucrase/register ./scripts/smoke-node.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
@@ -44,12 +53,42 @@
     "prettier": "^3.6.2",
     "rimraf": "^6.1.0",
     "sucrase": "^3.35.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "node-gyp": "^11.4.2"
   },
   "dependencies": {
-    "cleaners": "^0.3.17"
+    "cleaners": "^0.3.17",
+    "node-addon-api": "^8.5.0"
   },
   "peerDependencies": {
     "react-native": ">=0.47.0 <1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/src/index.d.ts",
+      "react-native": "./lib/src/index.js",
+      "default": "./lib/src/index.js"
+    },
+    "./node": {
+      "types": "./lib/src/node.d.ts",
+      "default": "./lib/src/node.js"
+    },
+    "./package.json": "./package.json",
+    "./lib/src/CppBridge": {
+      "types": "./lib/src/CppBridge.d.ts",
+      "default": "./lib/src/CppBridge.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "node": [
+        "lib/src/node.d.ts"
+      ]
+    }
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    }
   }
 }

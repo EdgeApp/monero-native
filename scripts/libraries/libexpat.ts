@@ -1,6 +1,7 @@
 import { join } from 'path'
 
 import { defineLib } from '../utils/lib'
+import { appleSdkEnv } from '../utils/platforms'
 
 export const libexpat = defineLib({
   name: 'libexpat',
@@ -14,7 +15,8 @@ export const libexpat = defineLib({
     build.cd(join(build.cwd, 'expat'))
 
     build.exportEnv({ ...platform.tools })
-    if (platform.type === 'ios') build.exportEnv({ ...platform.sdkFlags })
+    const sdkEnv = appleSdkEnv(platform)
+    if (sdkEnv != null) build.exportEnv(sdkEnv)
 
     await build.exec('./buildconf.sh')
     await build.exec('./configure', [

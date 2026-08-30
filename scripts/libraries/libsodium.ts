@@ -1,4 +1,5 @@
 import { defineLib } from '../utils/lib'
+import { appleSdkEnv } from '../utils/platforms'
 
 export const libsodium = defineLib({
   name: 'libsodium',
@@ -10,9 +11,8 @@ export const libsodium = defineLib({
 
   build: async (build, platform, prefixPath) => {
     build.exportEnv({ ...platform.tools })
-
-    build.exportEnv({ ...platform.tools })
-    if (platform.type === 'ios') build.exportEnv({ ...platform.sdkFlags })
+    const sdkEnv = appleSdkEnv(platform)
+    if (sdkEnv != null) build.exportEnv(sdkEnv)
 
     await build.exec('./configure', [
       '--enable-static',

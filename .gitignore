@@ -7,3 +7,5 @@
 
 # iOS stuff:
 .DS_Store
+/prebuilds/
+*.tgz

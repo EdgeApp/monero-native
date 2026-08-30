@@ -18,7 +18,7 @@
 // | OpenSSL    | custom            | custom                |
 //
 
-import { mkdir, rm } from 'fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 
 import { boost } from './libraries/boost'
@@ -30,7 +30,11 @@ import { lwsf } from './libraries/lwsf'
 import { openssl } from './libraries/openssl'
 import { lsr, tmpPath } from './utils/common'
 import { defineLib } from './utils/lib'
-import { makeIosPlatforms, makePlatforms } from './utils/platforms'
+import {
+  makeHostPlatforms,
+  makeIosPlatforms,
+  makePlatforms
+} from './utils/platforms'
 import { addTask, startBuild } from './utils/tasks'
 
 const ffi = defineLib({
@@ -99,22 +103,36 @@ const ffi = defineLib({
           ? useCxx
             ? platform.sdkFlags.CXXFLAGS
             : platform.sdkFlags.CFLAGS
-          : ''
+          : platform.type === 'host'
+            ? `${useCxx ? platform.sdkFlags.CXXFLAGS : platform.sdkFlags.CFLAGS} -fPIC`
+            : ''
       await build.exec(useCxx ? platform.tools.CXX : platform.tools.CC, [
         '-c',
         ...(useCxx ? ['-std=c++17'] : []),
-        ...sdkFlags.split(' '),
+        ...sdkFlags.split(' ').filter(flag => flag !== ''),
         ...includePaths.map(path => `-I${path}`),
         `-o${object}`,
         join(srcPath, source)
       ])
     }
 
-    if (platform.type === 'ios') {
+    if (platform.type === 'ios' || platform.type === 'host') {
       // Link everything together into a single giant .o file:
       const objectPath = join(build.cwd, 'monero-module.o')
+      const linkFlags =
+        platform.type === 'host'
+          ? [
+              ...platform.sdkFlags.LDFLAGS.split(' ').filter(
+                flag => flag !== ''
+              ),
+              // Relocatable link: do not pull the C++ runtime into the .o.
+              // node-gyp links -lc++ when producing monero.node.
+              '-nostdlib'
+            ]
+          : []
       await build.exec(platform.tools.LD, [
         '-r',
+        ...linkFlags,
         '-o',
         objectPath,
         ...libPaths.map(path => `-L${path}`),
@@ -125,14 +143,16 @@ const ffi = defineLib({
 
       // Localize all symbols except the ones we really want,
       // hiding them from future linking steps:
-      await build.exec(platform.tools.OBJCOPY, [
-        objectPath,
-        '-w',
-        '-L*',
-        '-L!_moneroMethods',
-        '-L!_moneroMethodCount',
-        '-L!*moneroSetEventCallback*'
-      ])
+      if (platform.type === 'ios') {
+        await build.exec(platform.tools.OBJCOPY, [
+          objectPath,
+          '-w',
+          '-L*',
+          '-L!_moneroMethods',
+          '-L!_moneroMethodCount',
+          '-L!*moneroSetEventCallback*'
+        ])
+      }
 
       // Generate a static library:
       const library = join(build.cwd, `monero-module.a`)
@@ -160,11 +180,7 @@ const ffi = defineLib({
         '-llog',
         `-Wl,--version-script=${join(srcPath, 'jni/exports.map')}`,
         '-Wl,--no-undefined',
-        '-Wl,-z,max-page-size=16384',
-        // Drop the symbol table. JNI resolves through .dynsym, which
-        // --strip-all keeps, and the debug symbols roughly double the
-        // shipped library otherwise.
-        '-Wl,--strip-all'
+        '-Wl,-z,max-page-size=16384'
       ])
       build.log('done')
     }
@@ -219,52 +235,6 @@ addTask({
   }
 })
 
-/**
- * The same xcframework, but arm64 only: an iPhone slice and an Apple-Silicon
- * simulator slice. Skips `iphonesimulator-x86_64`, which roughly halves the
- * iOS build for anyone who never boots an Intel simulator.
- */
-addTask({
-  name: 'xcframework-arm64',
-  deps: ['ffi.build.iphoneos-arm64', 'ffi.build.iphonesimulator-arm64'],
-  async run(build) {
-    const platforms = (await makeIosPlatforms()).filter(
-      platform => platform.arch === 'arm64'
-    )
-
-    // One arch per SDK here, so `lipo -create` is just a copy, but going
-    // through it keeps this identical to the fat-library path above:
-    const merged: string[] = []
-    for (const sdk of new Set(platforms.map(row => row.sdk))) {
-      build.log(`Merging libraries for ${sdk}...`)
-      const sdkDir = join(build.cwd, sdk)
-      await mkdir(sdkDir, { recursive: true })
-      const output = join(sdkDir, 'libmonero-module.a')
-
-      await build.exec('lipo', [
-        '-create',
-        '-output',
-        output,
-        ...platforms
-          .filter(platform => platform.sdk === sdk)
-          .map(({ sdk, arch }) =>
-            join(build.basePath, `build/ffi-${sdk}-${arch}`, `monero-module.a`)
-          )
-      ])
-      merged.push('-library', output)
-    }
-
-    build.log('Creating XCFramework...')
-    await rm('ios/MoneroModule.xcframework', { recursive: true, force: true })
-    await build.exec('xcodebuild', [
-      '-create-xcframework',
-      ...merged,
-      '-output',
-      join(__dirname, '../ios/MoneroModule.xcframework')
-    ])
-  }
-})
-
 addTask({
   name: 'default',
   cacheTag: 'default',
@@ -276,22 +246,14 @@ addTask({
   async run() {}
 })
 
-/**
- * arm64 everywhere: one Android ABI plus the two arm64 iOS slices. This is
- * what a modern phone, an Apple-Silicon simulator and the Node CLI need.
- */
-addTask({
-  name: 'default-arm64',
-  cacheTag: 'default-arm64',
-  deps: ['ffi.build.android-arm64-v8a', 'xcframework-arm64'],
-  async run() {}
-})
-
 async function main(): Promise<void> {
   await mkdir(tmpPath, { recursive: true })
 
-  // Set up build:
-  const platforms = await makePlatforms()
+  const target = process.argv[2] ?? 'host'
+  const hostOnly = target === 'host' || target === 'nodeaddon'
+
+  const platforms = hostOnly ? await makeHostPlatforms() : await makePlatforms()
+
   boost(platforms)
   ffi(platforms)
   libexpat(platforms)
@@ -301,8 +263,71 @@ async function main(): Promise<void> {
   lwsf(platforms)
   openssl(platforms)
 
-  // await startBuild('libsodium', { basePath: tmpPath })
-  await startBuild(process.argv[2] ?? 'default', { basePath: tmpPath })
+  if (hostOnly) {
+    const hostName = platforms[0].name
+    addTask({
+      name: 'nodeaddon',
+      cacheTag: undefined,
+      deps: [`ffi.build.${hostName}`],
+      async run(build) {
+        const ffiPath = join(build.basePath, 'build', `ffi-${hostName}`)
+        const staticLib = join(ffiPath, 'monero-module.a')
+        const prebuildDir = join(
+          __dirname,
+          '../prebuilds',
+          `${process.platform}-${process.arch}`
+        )
+        await mkdir(prebuildDir, { recursive: true })
+
+        const napiInclude = String(
+          require(join(__dirname, '../node_modules/node-addon-api')).include
+        ).replace(/"/g, '')
+
+        const gypDir = join(build.basePath, 'nodeaddon')
+        await mkdir(gypDir, { recursive: true })
+        // node-gyp/make cannot compile sources given as absolute paths.
+        const napiSrc = join(__dirname, '../src/node/monero-napi.cpp')
+        await copyFile(napiSrc, join(gypDir, 'monero-napi.cpp'))
+        const gypPath = join(gypDir, 'binding.gyp')
+        const gyp = {
+          targets: [
+            {
+              target_name: 'monero',
+              sources: ['monero-napi.cpp'],
+              include_dirs: [
+                napiInclude,
+                join(__dirname, '../src/monero-wrapper')
+              ],
+              defines: ['NAPI_CPP_EXCEPTIONS'],
+              'cflags!': ['-fno-exceptions'],
+              'cflags_cc!': ['-fno-exceptions'],
+              cflags_cc: ['-std=c++17', '-fPIC'],
+              libraries: [staticLib],
+              xcode_settings: {
+                GCC_ENABLE_CPP_EXCEPTIONS: 'YES',
+                CLANG_CXX_LANGUAGE_STANDARD: 'c++17',
+                MACOSX_DEPLOYMENT_TARGET: '11.0',
+                OTHER_LDFLAGS: ['-lc++', '-lz']
+              }
+            }
+          ]
+        }
+        await writeFile(gypPath, JSON.stringify(gyp, null, 2))
+
+        const nodeGyp = join(__dirname, '../node_modules/.bin/node-gyp')
+        await build.exec(nodeGyp, ['rebuild'], { cwd: gypDir })
+
+        const built = join(gypDir, 'build/Release/monero.node')
+        await build.exec('cp', [built, join(prebuildDir, 'monero.node')])
+        // Remove local and debug symbols. The addon is loaded through its
+        // registration entry point, which is global and survives `-x`.
+        await build.exec('strip', ['-x', join(prebuildDir, 'monero.node')])
+        build.log(`Wrote ${join(prebuildDir, 'monero.node')}`)
+      }
+    })
+  }
+
+  await startBuild(hostOnly ? 'nodeaddon' : target, { basePath: tmpPath })
 }
 
 main().catch((error: unknown) => {
