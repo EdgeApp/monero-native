@@ -1,6 +1,7 @@
 import { join } from 'path'
 
 import { defineLib } from '../utils/lib'
+import { appleSdkEnv } from '../utils/platforms'
 
 export const libzmq = defineLib({
   name: 'libzmq',
@@ -17,7 +18,14 @@ export const libzmq = defineLib({
       ...platform.tools,
       PKG_CONFIG_PATH: join(prefixPath, 'lib/pkgconfig')
     })
-    if (platform.type === 'ios') build.exportEnv({ ...platform.sdkFlags })
+    const sdkEnv = appleSdkEnv(platform)
+    if (sdkEnv != null) build.exportEnv(sdkEnv)
+    // Apple clang 21 treats -Wmissing-braces as error under libzmq's -Werror.
+    const werror = '-Wno-error=missing-braces'
+    build.exportEnv({
+      CFLAGS: `${build.env.CFLAGS ?? ''} ${werror}`.trim(),
+      CXXFLAGS: `${build.env.CXXFLAGS ?? ''} ${werror}`.trim()
+    })
 
     await build.exec('./autogen.sh')
     await build.exec('./configure', [

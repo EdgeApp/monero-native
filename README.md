@@ -1,45 +1,26 @@
-# react-native-monero
+# monero-native
 
-This library packages Monero C++ client for use on React Native.
+Native Monero wallet library (LWSF) for React Native and Node.js.
 
-Supported platforms:
+The compiled C++ lives in this package. React Native and Node are hosts.
 
-- Android
-- iOS
+- GitHub: [EdgeApp/monero-native](https://github.com/EdgeApp/monero-native)
+- npm: `monero-native`
 
-## Usage
+## React Native
 
-First, add this library to your React Native app using NPM or Yarn, and run `pod install` as necessary to integrate it with your app's native code.
-
-Here is a simple usage example:
+Add the package and run `pod install` as needed.
 
 ```js
-import { what } from 'react-native-monero'
-
-// ???
+import { makeMonero } from 'monero-native'
 ```
 
-## Developing
+Mobile binaries: `npm run build-native` (Android + iOS). That script fetches third-party C++ and is not run on `npm install`.
 
-This library relies on a large amount of native C++ code from other repos. To integrate this code, you must run the following script before publishing this library to NPM:
+## Node (CLI)
 
-```sh
-npm run build-native
+```js
+import { makeNodeMoneroModule } from 'monero-native/node'
 ```
 
-This script does the following tasks:
-
-- Download third-party source code.
-- Compile shared libraries for Android.
-- Compile an iOS universal static library and put it into an XCFramework.
-
-The `build-native` script is also the place to make edits when upgrading any of the third-party dependencies. The react-native-monero repo doesn't include these third-party C++ sources, since they are enormous.
-
-For this to work, you need:
-
-- A recent Android SDK, installed at `$ANDROID_HOME`
-- Xcode command-line tools
-- `autoreconf`, provided by `brew install autoconf`
-- `automake`, provided by `brew install automake`
-- `cmake`, provided by `brew install cmake`
-- `llvm-objcopy`, provided by `brew install llvm`
+Host addon: `npm run build-native-host` (explicit; `prepare` / `prepack` compile JavaScript only).

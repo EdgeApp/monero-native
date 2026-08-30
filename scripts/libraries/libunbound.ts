@@ -1,6 +1,7 @@
 import { join } from 'path'
 
 import { defineLib } from '../utils/lib'
+import { appleSdkEnv } from '../utils/platforms'
 
 export const libunbound = defineLib({
   name: 'libunbound',
@@ -17,7 +18,8 @@ export const libunbound = defineLib({
       ...platform.tools,
       PKG_CONFIG_PATH: join(prefixPath, 'lib/pkgconfig')
     })
-    if (platform.type === 'ios') build.exportEnv({ ...platform.sdkFlags })
+    const sdkEnv = appleSdkEnv(platform)
+    if (sdkEnv != null) build.exportEnv(sdkEnv)
 
     await build.exec('./configure', [
       '--enable-static',

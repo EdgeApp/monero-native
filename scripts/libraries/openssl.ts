@@ -1,7 +1,7 @@
 import { dirname } from 'path'
 
 import { defineLib } from '../utils/lib'
-import type { Platform } from '../utils/platforms'
+import { appleSdkEnv, type Platform } from '../utils/platforms'
 
 export const openssl = defineLib({
   name: 'openssl',
@@ -29,6 +29,11 @@ export const openssl = defineLib({
     //     CROSS_SDK: basename(platform.sysroot)
     //   })
     // }
+
+    const sdkEnv = appleSdkEnv(platform)
+    if (sdkEnv != null) {
+      build.exportEnv({ ...platform.tools, ...sdkEnv })
+    }
 
     if (platform.type === 'ios') {
       // OpenSSL's ios64-xcrun target stopped passing any deployment-target
@@ -78,6 +83,15 @@ function getTarget(platform: Platform): string {
           ? 'ios64-xcrun'
           : 'iossimulator-arm64-xcrun'
     }
+  }
+
+  if (platform.type === 'host') {
+    if (platform.os === 'darwin') {
+      return platform.arch === 'arm64'
+        ? 'darwin64-arm64-cc'
+        : 'darwin64-x86_64-cc'
+    }
+    return platform.arch === 'arm64' ? 'linux-aarch64' : 'linux-x86_64'
   }
 
   return ''
