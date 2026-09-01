@@ -133,7 +133,7 @@ export async function makeAndroidPlatforms(
       ANDROID_HOME,
       'cmdline-tools/latest/bin/sdkmanager'
     )
-    await loudExec(sdkManagerPath, [`"ndk;${ndkVersion}"`])
+    await loudExec(sdkManagerPath, [`ndk;${ndkVersion}`])
   }
 
   // Find the prebuilt toolchain:
