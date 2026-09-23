@@ -3,6 +3,7 @@
 ## Unreleased
 
 - fixed: iOS builds no longer fail to link with an `arm64_b26` fixup error against `_mdb_mutex_failed` when the app also carries other large native libraries. The vendored LMDB puts about 50 environment functions in a private `__TEXT,text_env` section, and the two-field Mach-O section specifier it used left `S_ATTR_PURE_INSTRUCTIONS` unset, so the linker did not count the section as code: it sorted it past every real code section, at the far end of `__TEXT`, and would not plant a branch island for calls that crossed the +/-128MB `B`/`BL` reach. The section now declares its type and attributes in full, so it sorts directly after `__text`. Ported from react-native-monero 0.5.1.
+- added: The iOS build fails if any `__TEXT` section of the assembled xcframework holds code the linker will not recognize as code, so the flag defect above cannot ship again unnoticed.
 
 ## 0.5.0 (2026-08-14)
 
