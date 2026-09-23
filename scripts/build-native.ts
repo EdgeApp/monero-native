@@ -28,6 +28,7 @@ import { libunbound } from './libraries/libunbound'
 import { libzmq } from './libraries/libzmq'
 import { lwsf } from './libraries/lwsf'
 import { openssl } from './libraries/openssl'
+import { checkCodeSections } from './utils/check-code-sections'
 import { lsr, tmpPath } from './utils/common'
 import { defineLib } from './utils/lib'
 import { makeIosPlatforms, makePlatforms } from './utils/platforms'
@@ -216,6 +217,9 @@ addTask({
       '-output',
       join(__dirname, '../ios/MoneroModule.xcframework')
     ])
+
+    build.log('Checking section flags...')
+    await checkCodeSections(join(__dirname, '../ios/MoneroModule.xcframework'))
   }
 })
 
@@ -262,6 +266,9 @@ addTask({
       '-output',
       join(__dirname, '../ios/MoneroModule.xcframework')
     ])
+
+    build.log('Checking section flags...')
+    await checkCodeSections(join(__dirname, '../ios/MoneroModule.xcframework'))
   }
 })
 
